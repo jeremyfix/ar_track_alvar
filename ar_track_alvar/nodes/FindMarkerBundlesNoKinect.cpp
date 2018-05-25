@@ -76,6 +76,7 @@ double max_track_error;
 std::string cam_image_topic; 
 std::string cam_info_topic; 
 std::string output_frame;
+bool post_cam_to_marker;
 int n_bundles = 0;   
 
 void GetMultiMarkerPoses(IplImage *image);
@@ -128,8 +129,17 @@ void makeMarkerMsgs(int type, int id, Pose &p, sensor_msgs::ImageConstPtr image_
     out << id;
     std::string id_string = out.str();
     markerFrame += id_string;
-    tf::StampedTransform camToMarker (t, image_msg->header.stamp, image_msg->header.frame_id, markerFrame.c_str());
-    tf_broadcaster->sendTransform(camToMarker);
+
+    if(post_cam_to_marker) {
+      tf::StampedTransform camToMarker (t, image_msg->header.stamp, image_msg->header.frame_id, markerFrame.c_str());
+      tf_broadcaster->sendTransform(camToMarker);
+      ROS_INFO ("post cam to marker");
+    }
+    else {
+      tf::StampedTransform markerToCam (t.inverse(), image_msg->header.stamp,markerFrame.c_str(),  image_msg->header.frame_id);
+      tf_broadcaster->sendTransform(markerToCam);
+      ROS_INFO ("post marker to cam");
+    }
   }
 
   //Create the rviz visualization message
@@ -281,10 +291,10 @@ int main(int argc, char *argv[])
   ros::init (argc, argv, "marker_detect");
   ros::NodeHandle n;
 
-  if(argc < 8){
+  if(argc < 9){
     std::cout << std::endl;
     cout << "Not enough arguments provided." << endl;
-    cout << "Usage: ./findMarkerBundles <marker size in cm> <max new marker error> <max track error> <cam image topic> <cam info topic> <output frame> <list of bundle XML files...>" << endl;
+    cout << "Usage: ./findMarkerBundles <marker size in cm> <max new marker error> <max track error> <cam image topic> <cam info topic> <output frame> <post_cam_to_marker> <list of bundle XML files...>" << endl;
     std::cout << std::endl;
     return 0;
   }
@@ -296,7 +306,10 @@ int main(int argc, char *argv[])
   cam_image_topic = argv[4];
   cam_info_topic = argv[5];
   output_frame = argv[6];
-  int n_args_before_list = 7;
+
+  post_cam_to_marker = atoi(argv[7]);
+  
+  int n_args_before_list = 8;
   n_bundles = argc - n_args_before_list;
 
   marker_detector.SetMarkerSize(marker_size);

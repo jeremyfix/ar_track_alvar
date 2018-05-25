@@ -83,6 +83,7 @@ double max_track_error;
 std::string cam_image_topic;
 std::string cam_info_topic;
 std::string output_frame;
+bool post_cam_to_marker;
 int marker_resolution = 5; // default marker resolution
 int marker_margin = 2; // default marker margin
 
@@ -397,8 +398,14 @@ void getPointCloudCallback (const sensor_msgs::PointCloud2ConstPtr &msg)
 	  out << id;
 	  std::string id_string = out.str();
 	  markerFrame += id_string;
-	  tf::StampedTransform camToMarker (t, image_msg->header.stamp, image_msg->header.frame_id, markerFrame.c_str());
-	  tf_broadcaster->sendTransform(camToMarker);
+	  if(post_cam_to_marker) {
+	    tf::StampedTransform camToMarker (t, image_msg->header.stamp, image_msg->header.frame_id, markerFrame.c_str());
+	    tf_broadcaster->sendTransform(camToMarker);
+	  }
+	  else {
+	    tf::StampedTransform markerToCam (t.inverse(), image_msg->header.stamp, markerFrame.c_str(), image_msg->header.frame_id);
+	    tf_broadcaster->sendTransform(markerToCam);
+	  }
 
 	  //Create the rviz visualization messages
 	  tf::poseTFToMsg (markerPose, rvizMarker_.pose);
@@ -496,11 +503,11 @@ int main(int argc, char *argv[])
   if(argc > 1) {
     ROS_WARN("Command line arguments are deprecated. Consider using ROS parameters and remappings.");
 
-    if(argc < 7){
+    if(argc < 8){
       std::cout << std::endl;
       cout << "Not enough arguments provided." << endl;
       cout << "Usage: ./individualMarkers <marker size in cm> <max new marker error> <max track error> "
-           << "<cam image topic> <cam info topic> <output frame> [ <max frequency> <marker_resolution> <marker_margin>]";
+           << "<cam image topic> <cam info topic> <output frame> <cam_to_marker> [ <max frequency> <marker_resolution> <marker_margin>]";
       std::cout << std::endl;
       return 0;
     }
@@ -512,15 +519,16 @@ int main(int argc, char *argv[])
     cam_image_topic = argv[4];
     cam_info_topic = argv[5];
     output_frame = argv[6];
+    post_cam_to_marker = argv[7];
 
-    if (argc > 7) {
-      max_frequency = atof(argv[7]);
+    if (argc > 8) {
+      max_frequency = atof(argv[8]);
       pn.setParam("max_frequency", max_frequency);
     }
-    if (argc > 8)
-      marker_resolution = atoi(argv[8]);
     if (argc > 9)
-      marker_margin = atoi(argv[9]);
+      marker_resolution = atoi(argv[9]);
+    if (argc > 10)
+      marker_margin = atoi(argv[10]);
 
   } else {
     // Get params from ros param server.
@@ -532,6 +540,7 @@ int main(int argc, char *argv[])
     pn.param("marker_resolution", marker_resolution, 5);
     pn.param("marker_margin", marker_margin, 2);
     pn.param("output_frame_from_msg", output_frame_from_msg, false);
+    pn.param("cam_to_marker", post_cam_to_marker, true);
 
     if (!output_frame_from_msg && !pn.getParam("output_frame", output_frame)) {
       ROS_ERROR("Param 'output_frame' has to be set if the output frame is not "
